@@ -23,10 +23,12 @@ const ui = {
 
 const saveKey = 'joos-little-universe-save-v1';
 const saved = (() => { try { return JSON.parse(localStorage.getItem(saveKey) || '{}'); } catch { return {}; } })();
+const defaultSpawnX = (typeof saved.x === 'number' && Math.abs(saved.z) < 25) ? saved.x : 0;
+const defaultSpawnZ = (typeof saved.z === 'number' && Math.abs(saved.z) < 25) ? saved.z : 4;
 const state = {
   started: false, stars: new Set(saved.stars || []), notes: new Set(saved.notes || []),
   catBond: Math.max(0, Number(saved.catBond) || 0), finale: Boolean(saved.finale),
-  pos: new THREE.Vector3(saved.x || 0, 0, saved.z || 0), vel: new THREE.Vector3(),
+  pos: new THREE.Vector3(defaultSpawnX, 0, defaultSpawnZ), vel: new THREE.Vector3(),
   heading: Math.PI, active: null, toastTimer: 0, modalOpen: false
 };
 
@@ -334,8 +336,8 @@ function loadGLB(url, pos, scale = 1.0, rotY = 0, onLoaded = null) {
 }
 
 // 1. Fairytale Castle
-const castleY = getTerrainHeight(0, 48);
-const castleGroup = loadGLB('/models/castle.glb', [0, castleY, 48], 1.0, 0, (m) => {
+const castleY = getTerrainHeight(0, 56);
+const castleGroup = loadGLB('/models/castle.glb', [0, castleY, 56], 1.0, 0, (m) => {
   // Find heart monument inside model to animate
   m.traverse((child) => {
     if (child.name.includes('Heart')) {
@@ -489,7 +491,7 @@ interactables.push(yarnG);
 
 // Castle Finale Anchor (Sanctuary Heart)
 const finaleAnchor = new THREE.Group();
-finaleAnchor.position.set(0, getTerrainHeight(0, 39.5) + 0.8, 39.5);
+finaleAnchor.position.set(0, getTerrainHeight(0, 52.5) + 0.8, 52.5);
 finaleAnchor.userData = { type: 'finale', label: 'Open the castle surprise' };
 interactables.push(finaleAnchor); world.add(finaleAnchor);
 
@@ -604,7 +606,7 @@ const regions = [
   { name: 'Mosslight Meadow', note: 'THE WORLD IS YOURS TO WANDER', x: 0, z: 0, r: 22 },
   { name: 'The Little Cup Café', note: 'WARM TEA · WARMER COMPANY', x: -31, z: -20, r: 22 },
   { name: 'Wishing Garden', note: 'A QUIET PLACE FOR BRIGHT THOUGHTS', x: 29, z: -18, r: 22 },
-  { name: 'The Starlit Castle', note: 'SOME SECRETS WAIT AT THE TOP', x: 0, z: 46, r: 26 }
+  { name: 'The Starlit Castle', note: 'SOME SECRETS WAIT AT THE TOP', x: 0, z: 54, r: 24 }
 ];
 
 let cameraYaw = -0.15, cameraPitch = 0.40, cameraDist = 13.5;
@@ -758,12 +760,39 @@ ui.help.addEventListener('click', () => openModal({
   body: 'Explore with WASD or arrow keys. On mobile, glide with the thumbstick. Drag to look around. Walk close to something glowing and press E or tap the heart. Find stars, make a friend, discover the castle secret.',
   button: "Let's go"
 }));
-ui.begin.addEventListener('click', () => {
+function stepInside(e) {
+  if (e) {
+    if (e.stopPropagation) e.stopPropagation();
+  }
+  if (state.started) return;
   state.started = true;
+
+  // Immediate visual dismissal
   ui.welcome.classList.add('leaving');
-  startAudio();
+  ui.welcome.style.opacity = '0';
+  ui.welcome.style.pointerEvents = 'none';
+  setTimeout(() => {
+    ui.welcome.style.display = 'none';
+    ui.welcome.hidden = true;
+  }, 350);
+
+  // Safe audio launch
+  try {
+    startAudio();
+    sfx('sparkle');
+  } catch (err) {
+    console.warn('Audio start error:', err);
+  }
+
   showToast('Welcome to your little universe ✦');
-});
+}
+
+// Multi-trigger listeners so button clicks and screen taps ALWAYS work instantly
+ui.begin.addEventListener('click', stepInside);
+ui.begin.addEventListener('pointerdown', (e) => { e.stopPropagation(); stepInside(e); });
+ui.begin.addEventListener('touchend', (e) => { e.preventDefault(); stepInside(e); });
+ui.welcome.addEventListener('click', stepInside);
+
 
 /* ========================================================================
    INTERACTIONS
@@ -882,6 +911,9 @@ ui.touchAction.addEventListener('click', () => interact());
    CONTROLS: KEYBOARD, JOYSTICK, TOUCH & ORBIT
    ======================================================================== */
 window.addEventListener('keydown', e => {
+  if (!state.started) {
+    stepInside();
+  }
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
   moveKeys.add(e.key.toLowerCase());
   if (e.key.toLowerCase() === 'e' || e.key === 'Enter') interact();
