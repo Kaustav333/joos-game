@@ -30,4 +30,7 @@
 .primary-button * {
   pointer-events: none;
 }
+#game:focus, canvas:focus {
+  outline: none;
+}
 

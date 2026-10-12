@@ -612,6 +612,30 @@ const regions = [
 let cameraYaw = -0.15, cameraPitch = 0.40, cameraDist = 13.5;
 let drag = null, ptrDown = null;
 const moveKeys = new Set(), joyVec = new THREE.Vector2();
+let targetMovePos = null;
+
+// Visual Click-to-Move Ripple on Terrain
+const clickMarkerGeo = new THREE.RingGeometry(0.35, 0.55, 32);
+clickMarkerGeo.rotateX(-Math.PI / 2);
+const clickMarkerMat = new THREE.MeshBasicMaterial({
+  color: '#ffe570',
+  transparent: true,
+  opacity: 0,
+  side: THREE.DoubleSide,
+  depthWrite: false
+});
+const clickMarker = new THREE.Mesh(clickMarkerGeo, clickMarkerMat);
+clickMarker.visible = false;
+world.add(clickMarker);
+let clickMarkerTimer = 0;
+
+function clearAllMovement() {
+  moveKeys.clear();
+  joyVec.set(0, 0);
+  targetMovePos = null;
+  state.vel.set(0, 0, 0);
+  if (clickMarker) clickMarker.visible = false;
+}
 
 function updateCamera(dt) {
   const ty = state.pos.y + 1.4;
@@ -640,6 +664,7 @@ function showToast(m) {
 }
 
 function openModal({ eyebrow = 'A NOTE FOR YOU', title, body, button = 'Keep wandering' }) {
+  clearAllMovement();
   ui.modalEyebrow.textContent = eyebrow;
   ui.modalTitle.textContent = title;
   ui.modalBody.textContent = body;
@@ -649,8 +674,10 @@ function openModal({ eyebrow = 'A NOTE FOR YOU', title, body, button = 'Keep wan
 }
 
 function closeModal() {
+  clearAllMovement();
   ui.modal.hidden = true;
   state.modalOpen = false;
+  try { window.focus(); } catch {}
 }
 ui.closeModal.addEventListener('click', closeModal);
 ui.modalContinue.addEventListener('click', closeModal);
@@ -766,6 +793,11 @@ function stepInside(e) {
   }
   if (state.started) return;
   state.started = true;
+  clearAllMovement();
+  try {
+    window.focus();
+    if (document.body) document.body.focus();
+  } catch {}
 
   // Immediate visual dismissal
   ui.welcome.classList.add('leaving');
@@ -774,6 +806,7 @@ function stepInside(e) {
   setTimeout(() => {
     ui.welcome.style.display = 'none';
     ui.welcome.hidden = true;
+    try { window.focus(); } catch {}
   }, 350);
 
   // Safe audio launch
@@ -910,21 +943,66 @@ ui.touchAction.addEventListener('click', () => interact());
 /* ========================================================================
    CONTROLS: KEYBOARD, JOYSTICK, TOUCH & ORBIT
    ======================================================================== */
+function isForwardKey(k, code) {
+  return k === 'w' || k === 'z' || k === 'arrowup' || k === 'up' || code === 'keyw' || code === 'keyz' || code === 'arrowup' || code === 'numpad8';
+}
+function isBackwardKey(k, code) {
+  return k === 's' || k === 'arrowdown' || k === 'down' || code === 'keys' || code === 'arrowdown' || code === 'numpad2';
+}
+function isLeftKey(k, code) {
+  return k === 'a' || k === 'q' || k === 'arrowleft' || k === 'left' || code === 'keya' || code === 'keyq' || code === 'arrowleft' || code === 'numpad4';
+}
+function isRightKey(k, code) {
+  return k === 'd' || k === 'arrowright' || k === 'right' || code === 'keyd' || code === 'arrowright' || code === 'numpad6';
+}
+
 window.addEventListener('keydown', e => {
   if (!state.started) {
     stepInside();
   }
-  if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
-  moveKeys.add(e.key.toLowerCase());
-  if (e.key.toLowerCase() === 'e' || e.key === 'Enter') interact();
-  if (e.key === 'Escape') { closeModal(); ui.soundPanel.hidden = true; }
+  const k = (e.key || '').toLowerCase();
+  const code = (e.code || '').toLowerCase();
+
+  if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'space', ' '].includes(k)) {
+    e.preventDefault();
+  }
+
+  if (isForwardKey(k, code)) moveKeys.add('forward');
+  if (isBackwardKey(k, code)) moveKeys.add('backward');
+  if (isLeftKey(k, code)) moveKeys.add('left');
+  if (isRightKey(k, code)) moveKeys.add('right');
+
+  // Any manual key press instantly overrides click-to-move
+  if (moveKeys.size > 0) {
+    targetMovePos = null;
+    if (clickMarker) clickMarker.visible = false;
+  }
+
+  if (k === 'e' || k === 'enter' || code === 'keye' || code === 'enter') interact();
+  if (k === 'escape') { closeModal(); ui.soundPanel.hidden = true; }
 });
-window.addEventListener('keyup', e => moveKeys.delete(e.key.toLowerCase()));
-window.addEventListener('blur', () => moveKeys.clear());
+
+window.addEventListener('keyup', e => {
+  const k = (e.key || '').toLowerCase();
+  const code = (e.code || '').toLowerCase();
+
+  if (isForwardKey(k, code)) moveKeys.delete('forward');
+  if (isBackwardKey(k, code)) moveKeys.delete('backward');
+  if (isLeftKey(k, code)) moveKeys.delete('left');
+  if (isRightKey(k, code)) moveKeys.delete('right');
+});
+
+window.addEventListener('blur', clearAllMovement);
+window.addEventListener('focus', clearAllMovement);
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) clearAllMovement();
+});
 
 let joyPtr = null;
 ui.joystick.addEventListener('pointerdown', e => {
-  joyPtr = e.pointerId; ui.joystick.setPointerCapture(e.pointerId); moveJoy(e);
+  joyPtr = e.pointerId;
+  try { ui.joystick.setPointerCapture(e.pointerId); } catch {}
+  moveJoy(e);
 });
 ui.joystick.addEventListener('pointermove', e => {
   if (e.pointerId === joyPtr) moveJoy(e);
@@ -936,47 +1014,112 @@ function moveJoy(e) {
   ui.joyKnob.style.left = `calc(50% + ${Math.cos(a) * cd}px)`;
   ui.joyKnob.style.top = `calc(50% + ${Math.sin(a) * cd}px)`;
   const n = rd / mx, dz = 0.15;
-  if (n < dz) joyVec.set(0, 0);
-  else { const s = Math.min(1, (n - dz) / (1 - dz)); joyVec.set(Math.cos(a) * s, -Math.sin(a) * s); }
+  if (n < dz) {
+    joyVec.set(0, 0);
+  } else {
+    const s = Math.min(1, (n - dz) / (1 - dz));
+    joyVec.set(Math.cos(a) * s, -Math.sin(a) * s);
+  }
 }
 function clearJoy() {
-  joyPtr = null; joyVec.set(0, 0);
-  ui.joyKnob.style.left = '50%'; ui.joyKnob.style.top = '50%';
+  joyPtr = null;
+  joyVec.set(0, 0);
+  ui.joyKnob.style.left = '50%';
+  ui.joyKnob.style.top = '50%';
 }
 ui.joystick.addEventListener('pointerup', clearJoy);
 ui.joystick.addEventListener('pointercancel', clearJoy);
+window.addEventListener('pointerup', clearJoy);
+window.addEventListener('pointercancel', clearJoy);
 
 const ray = new THREE.Raycaster(), pNdc = new THREE.Vector2();
 renderer.domElement.addEventListener('pointerdown', e => {
   if (e.target.closest('button') || e.target.closest('.touch-controls')) return;
+  try { window.focus(); } catch {}
   ptrDown = { x: e.clientX, y: e.clientY, id: e.pointerId, t: performance.now() };
   drag = { x: e.clientX, y: e.clientY, id: e.pointerId };
-  renderer.domElement.setPointerCapture(e.pointerId);
+  try { renderer.domElement.setPointerCapture(e.pointerId); } catch {}
 });
 renderer.domElement.addEventListener('pointermove', e => {
   if (!drag || drag.id !== e.pointerId) return;
-  cameraYaw -= (e.clientX - drag.x) * 0.0055;
-  cameraPitch = Math.max(0.12, Math.min(0.85, cameraPitch + (e.clientY - drag.y) * 0.004));
-  drag.x = e.clientX; drag.y = e.clientY;
+  const dx = e.clientX - drag.x;
+  const dy = e.clientY - drag.y;
+  cameraYaw -= dx * 0.0055;
+  cameraPitch = Math.max(0.12, Math.min(0.85, cameraPitch + dy * 0.004));
+  drag.x = e.clientX;
+  drag.y = e.clientY;
+});
+function releaseDomCapture(e) {
+  try {
+    if (renderer.domElement.hasPointerCapture(e.pointerId)) {
+      renderer.domElement.releasePointerCapture(e.pointerId);
+    }
+  } catch {}
+}
+renderer.domElement.addEventListener('pointercancel', e => {
+  releaseDomCapture(e);
+  drag = null;
+  ptrDown = null;
 });
 renderer.domElement.addEventListener('pointerup', e => {
-  if (!ptrDown || ptrDown.id !== e.pointerId) return;
-  const mv = Math.hypot(e.clientX - ptrDown.x, e.clientY - ptrDown.y), el = performance.now() - ptrDown.t;
-  if (mv < 8 && el < 400) {
+  releaseDomCapture(e);
+  if (!ptrDown || ptrDown.id !== e.pointerId) {
+    drag = null;
+    ptrDown = null;
+    return;
+  }
+  const mv = Math.hypot(e.clientX - ptrDown.x, e.clientY - ptrDown.y);
+  const el = performance.now() - ptrDown.t;
+  drag = null;
+  const wasClick = mv < 10 && el < 450;
+  ptrDown = null;
+
+  if (wasClick) {
+    if (!state.started) {
+      stepInside();
+      return;
+    }
     pNdc.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
     ray.setFromCamera(pNdc, camera);
+
+    // 1. Check if clicked directly on an interactable
     const hits = ray.intersectObjects(interactables.filter(o => o.visible), true);
     if (hits.length) {
       let o = hits[0].object;
       while (o && !interactables.includes(o)) o = o.parent;
       if (o) {
-        const p = new THREE.Vector3(); o.getWorldPosition(p);
-        if (Math.hypot(state.pos.x - p.x, state.pos.z - p.z) < 7.5) interact(o);
-        else showToast('Wander a little closer first ✧');
+        const p = new THREE.Vector3();
+        o.getWorldPosition(p);
+        const d = Math.hypot(state.pos.x - p.x, state.pos.z - p.z);
+        if (d < 4.5) {
+          interact(o);
+        } else {
+          // Walk toward interactable
+          targetMovePos = new THREE.Vector3(p.x, getTerrainHeight(p.x, p.z), p.z);
+          clickMarker.position.set(p.x, getTerrainHeight(p.x, p.z) + 0.08, p.z);
+          clickMarker.scale.set(0.6, 1, 0.6);
+          clickMarker.visible = true;
+          clickMarkerTimer = 1.0;
+          showToast('Walking over ✧');
+        }
+        return;
+      }
+    }
+
+    // 2. Click to Move on Terrain
+    const terrainHits = ray.intersectObject(terrainMesh, false);
+    if (terrainHits.length > 0) {
+      const hitPt = terrainHits[0].point;
+      const distFromCenter = Math.hypot(hitPt.x, hitPt.z);
+      if (distFromCenter <= 53) {
+        targetMovePos = new THREE.Vector3(hitPt.x, getTerrainHeight(hitPt.x, hitPt.z), hitPt.z);
+        clickMarker.position.set(hitPt.x, getTerrainHeight(hitPt.x, hitPt.z) + 0.08, hitPt.z);
+        clickMarker.scale.set(0.6, 1, 0.6);
+        clickMarker.visible = true;
+        clickMarkerTimer = 1.0;
       }
     }
   }
-  drag = null; ptrDown = null;
 });
 renderer.domElement.addEventListener('wheel', e => {
   cameraDist = Math.max(7, Math.min(26, cameraDist + Math.sign(e.deltaY) * 1.2));
@@ -987,24 +1130,64 @@ renderer.domElement.addEventListener('wheel', e => {
    ======================================================================== */
 let walkCycle = 0;
 function updatePlayer(dt, t) {
+  // If not started or reading a note/modal, stay completely stationary
+  if (!state.started || state.modalOpen) {
+    state.vel.set(0, 0, 0);
+    targetMovePos = null;
+    return;
+  }
+
+  // Safety: if joystick is not actively held, guarantee joyVec is zero
+  if (joyPtr === null) {
+    joyVec.set(0, 0);
+  }
+
   let ix = 0, iz = 0;
-  if (moveKeys.has('w') || moveKeys.has('arrowup')) iz += 1;
-  if (moveKeys.has('s') || moveKeys.has('arrowdown')) iz -= 1;
-  if (moveKeys.has('a') || moveKeys.has('arrowleft')) ix -= 1;
-  if (moveKeys.has('d') || moveKeys.has('arrowright')) ix += 1;
+  if (moveKeys.has('forward')) iz += 1;
+  if (moveKeys.has('backward')) iz -= 1;
+  if (moveKeys.has('left')) ix -= 1;
+  if (moveKeys.has('right')) ix += 1;
   ix += joyVec.x; iz += joyVec.y;
 
   const il = Math.hypot(ix, iz);
-  let tSpd = 0; const tDir = new THREE.Vector3();
+  let tSpd = 0;
+  const tDir = new THREE.Vector3();
+
   if (il > 0.05) {
+    // Keyboard or Joystick has instant override over click-to-move
+    targetMovePos = null;
+    if (clickMarker.visible) clickMarker.visible = false;
+
     const nl = Math.min(1, il), nx = ix / il, nz = iz / il;
     const fwd = new THREE.Vector3(-Math.sin(cameraYaw), 0, -Math.cos(cameraYaw));
     const rt = new THREE.Vector3(Math.cos(cameraYaw), 0, -Math.sin(cameraYaw));
     tDir.copy(fwd.multiplyScalar(nz).add(rt.multiplyScalar(nx))).normalize();
     tSpd = nl * 7.5;
+  } else if (targetMovePos) {
+    // Click-to-move pathing toward clicked point
+    const dx = targetMovePos.x - state.pos.x;
+    const dz = targetMovePos.z - state.pos.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist < 0.45) {
+      targetMovePos = null;
+      if (clickMarker.visible) clickMarker.visible = false;
+      tSpd = 0;
+    } else {
+      tDir.set(dx / dist, 0, dz / dist);
+      const nl = Math.min(1, dist / 1.4);
+      tSpd = nl * 7.2;
+    }
   }
+
   const tVel = tDir.clone().multiplyScalar(tSpd);
-  state.vel.lerp(tVel, 1 - Math.exp(-dt * (tSpd > 0.1 ? 14 : 11)));
+  const lerpRate = tSpd > 0.1 ? (1 - Math.exp(-dt * 15)) : (1 - Math.exp(-dt * 20));
+  state.vel.lerp(tVel, lerpRate);
+
+  // Instant zero snap when stopping to prevent floating-point drift
+  if (tSpd === 0 && state.vel.lengthSq() < 0.002) {
+    state.vel.set(0, 0, 0);
+  }
+
   state.pos.x += state.vel.x * dt;
   state.pos.z += state.vel.z * dt;
   resolveCollisions(state.pos, state.vel);
@@ -1015,7 +1198,7 @@ function updatePlayer(dt, t) {
     let diff = Math.atan2(state.vel.x, state.vel.z) - state.heading;
     while (diff > Math.PI) diff -= Math.PI * 2;
     while (diff < -Math.PI) diff += Math.PI * 2;
-    state.heading += diff * (1 - Math.exp(-dt * 15));
+    state.heading += diff * (1 - Math.exp(-dt * 16));
   }
   playerG.position.set(state.pos.x, state.pos.y, state.pos.z);
   avatar.rotation.y = state.heading;
@@ -1075,6 +1258,18 @@ function updateCat(dt, t) {
    AMBIENT ANIMATION LOOP (Stars, Petals, Fireflies, Grass)
    ======================================================================== */
 function updateAmbient(dt, t) {
+  // Click-to-move ground ripple animation
+  if (clickMarker.visible) {
+    clickMarkerTimer = Math.max(0, clickMarkerTimer - dt * 1.5);
+    const prog = 1 - clickMarkerTimer;
+    const s = 0.6 + prog * 0.9;
+    clickMarker.scale.set(s, 1, s);
+    clickMarkerMat.opacity = Math.max(0, clickMarkerTimer * 0.9);
+    if (clickMarkerTimer <= 0 || !targetMovePos) {
+      clickMarker.visible = false;
+    }
+  }
+
   // Stars rotation & hover
   for (const s of starObjects) {
     if (s.holder.visible) {
