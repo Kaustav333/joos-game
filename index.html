@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <meta name="theme-color" content="#b4dfe7" />
+    <meta name="description" content="A tiny, dreamy world made for Jooo." />
+    <title>Jooo’s Little Universe</title>
+  </head>
+  <body>
+    <div id="game" aria-label="Jooo’s Little Universe, a 3D exploration game"></div>
+    <div class="vignette"></div>
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="Jooo’s Little Universe home"><span class="brand-mark">✦</span><span>Jooo’s <i>Little Universe</i></span></a>
+      <div class="top-actions">
+        <div class="star-counter"><span>✦</span><b id="starCount">0</b><small>/ 12</small></div>
+        <button class="icon-button" id="soundButton" aria-label="Toggle sound" title="Sound settings">♫</button>
+        <button class="icon-button" id="helpButton" aria-label="How to play" title="How to play">?</button>
+      </div>
+    </header>
+    <section class="welcome-card" id="welcomeCard">
+      <div class="eyebrow"><span></span> A LITTLE WORLD, JUST FOR YOU</div>
+      <h1>Somewhere<br /><em>between stars.</em></h1>
+      <p>Wander a little. Make a friend.<br />Find the small things that mean everything.</p>
+      <button class="primary-button" id="beginButton">Step inside <span>↗</span></button>
+      <div class="welcome-foot"><span>✧</span> Best enjoyed with sound <span class="dot">·</span> 5–10 min</div>
+    </section>
+    <aside class="region-label"><span class="region-pin"></span><span id="regionName">Mosslight Meadow</span><small id="regionNote">THE WORLD IS YOURS TO WANDER</small></aside>
+    <div class="bottom-ui">
+      <div class="quest-card"><div class="quest-icon" id="questIcon">☼</div><div><small id="questKicker">A LITTLE ADVENTURE</small><div id="questText">Follow the golden glimmers</div></div></div>
+      <button class="interact-button" id="interactButton" hidden><span id="interactIcon">✦</span><span id="interactLabel">Interact</span><kbd>E</kbd></button>
+      <div class="controls-hint"><span class="keycap">W</span><span class="keycap">A</span><span class="keycap">S</span><span class="keycap">D</span><span class="hint-copy">to wander <b>·</b> drag to look</span></div>
+    </div>
+    <div class="touch-controls" id="touchControls"><div class="joystick" id="joystick"><div class="joy-knob" id="joyKnob"></div></div><button class="touch-action" id="touchAction" aria-label="Interact">♡</button></div>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <div class="modal-backdrop" id="modal" hidden><section class="modal-card"><button class="modal-close" id="closeModal" aria-label="Close">×</button><div class="modal-ornament">✧</div><div class="eyebrow" id="modalEyebrow">A NOTE FOR YOU</div><h2 id="modalTitle"></h2><p id="modalBody"></p><button class="text-button" id="modalContinue">Keep wandering <span>→</span></button></section></div>
+    <div class="sound-panel" id="soundPanel" hidden><label>Music & sounds <span id="volumeValue">70%</span></label><input id="volumeSlider" type="range" min="0" max="100" value="70" /><button class="mute-toggle" id="muteToggle">Mute all sounds</button><small>Little sounds made just for this world</small></div>
+    <div class="loading-screen" id="loadingScreen"><div class="loading-sparkle">✦</div><span>gathering stardust…</span></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
